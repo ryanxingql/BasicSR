@@ -3,6 +3,8 @@ from collections import OrderedDict
 from os import path as osp
 from tqdm import tqdm
 
+import pyiqa
+
 from basicsr.archs import build_network
 from basicsr.losses import build_loss
 from basicsr.metrics import calculate_metric
@@ -191,13 +193,33 @@ class SRModel(BaseModel):
                 self.metric_results = {metric: 0 for metric in self.opt['val']['metrics'].keys()}
             # initialize the best metric results for each dataset_name (supporting multiple validation datasets)
             self._initialize_best_metric_results(dataset_name)
-        # zero self.metric_results
-        if with_metrics:
+            # zero self.metric_results
             self.metric_results = {metric: 0 for metric in self.metric_results}
 
         metric_data = dict()
+        metric_data_tensor = dict()
         if use_pbar:
             pbar = tqdm(total=len(dataloader), unit='image')
+
+        if with_metrics:
+            # PyIQA metrics settings
+            device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+            pyiqa_metrics = dict()
+            for metric_name in self.opt['val']['metrics']:
+                if self.opt['val']['metrics'][metric_name]['type'] == 'pyiqa':
+                    pyiqa_metrics[metric_name] = pyiqa.create_metric(metric_name, device=device)
+
+            # FID settings
+            cal_fid = False
+            if 'fid' in self.opt['val']['metrics']:
+                cal_fid = True
+                opt_fid = self.opt['val']['metrics'].pop('fid')  # avoid per-sample evaluation
+                if self.opt['is_train']:
+                    fid_sr_folder = osp.join(self.opt['path']['visualization'], 'fid', 'sr')
+                    fid_gt_folder = osp.join(self.opt['path']['visualization'], 'fid', 'gt')
+                else:
+                    fid_sr_folder = osp.join(self.opt['path']['visualization'], 'fid', dataset_name, 'sr')
+                    fid_gt_folder = osp.join(self.opt['path']['visualization'], 'fid', dataset_name, 'gt')
 
         for idx, val_data in enumerate(dataloader):
             img_name = osp.splitext(osp.basename(val_data['lq_path'][0]))[0]
@@ -207,9 +229,11 @@ class SRModel(BaseModel):
             visuals = self.get_current_visuals()
             sr_img = tensor2img([visuals['result']])
             metric_data['img'] = sr_img
+            metric_data_tensor['target'] = visuals['result']
             if 'gt' in visuals:
                 gt_img = tensor2img([visuals['gt']])
                 metric_data['img2'] = gt_img
+                metric_data_tensor['ref'] = visuals['gt']
                 del self.gt
 
             # tentative for out of GPU memory
@@ -231,9 +255,28 @@ class SRModel(BaseModel):
                 imwrite(sr_img, save_img_path)
 
             if with_metrics:
+                # save images for FID calculation
+                if cal_fid:
+                    if self.opt['is_train']:
+                        save_sr_img_path = osp.join(fid_sr_folder, f'{img_name}.png')
+                        save_gt_img_path = osp.join(fid_gt_folder, f'{img_name}.png')
+                    else:
+                        if self.opt['val']['suffix']:
+                            save_sr_img_path = osp.join(fid_sr_folder, f'{img_name}_{self.opt["val"]["suffix"]}.png')
+                            save_gt_img_path = osp.join(fid_gt_folder, f'{img_name}_{self.opt["val"]["suffix"]}.png')
+                        else:
+                            save_sr_img_path = osp.join(fid_sr_folder, f'{img_name}_{self.opt["name"]}.png')
+                            save_gt_img_path = osp.join(fid_gt_folder, f'{img_name}_{self.opt["name"]}.png')
+                    imwrite(sr_img, save_sr_img_path)
+                    imwrite(gt_img, save_gt_img_path)
+
                 # calculate metrics
                 for name, opt_ in self.opt['val']['metrics'].items():
-                    self.metric_results[name] += calculate_metric(metric_data, opt_)
+                    if name in pyiqa_metrics:
+                        self.metric_results[name] += pyiqa_metrics[name](**metric_data_tensor).cpu().item()  # input: img paths or RGB [0,1] tensors; target vs. ref
+                    else:
+                        self.metric_results[name] += calculate_metric(metric_data, opt_)
+
             if use_pbar:
                 pbar.update(1)
                 pbar.set_description(f'Test {img_name}')
@@ -241,8 +284,13 @@ class SRModel(BaseModel):
             pbar.close()
 
         if with_metrics:
+            if cal_fid:
+                self.metric_results['fid'] = pyiqa_metrics['fid'](target=fid_sr_folder, ref=fid_gt_folder)
+
+            # log metric results
             for metric in self.metric_results.keys():
-                self.metric_results[metric] /= (idx + 1)
+                if metric != 'fid':
+                    self.metric_results[metric] /= (idx + 1)
                 # update the best metric result
                 self._update_best_metric_result(dataset_name, metric, self.metric_results[metric], current_iter)
 
@@ -251,9 +299,9 @@ class SRModel(BaseModel):
     def _log_validation_metric_values(self, current_iter, dataset_name, tb_logger):
         log_str = f'Validation {dataset_name}\n'
         for metric, value in self.metric_results.items():
-            log_str += f'\t # {metric}: {value:.4f}'
+            log_str += f'    # {metric}: {value:.4f}'
             if hasattr(self, 'best_metric_results'):
-                log_str += (f'\tBest: {self.best_metric_results[dataset_name][metric]["val"]:.4f} @ '
+                log_str += (f'    Best: {self.best_metric_results[dataset_name][metric]["val"]:.4f} @ '
                             f'{self.best_metric_results[dataset_name][metric]["iter"]} iter')
             log_str += '\n'
 
