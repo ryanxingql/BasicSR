@@ -202,7 +202,8 @@ class BaseModel():
             self._set_lr(warm_up_lr_l)
 
     def get_current_learning_rate(self):
-        assert len(param_groups) == 1
+        for optimizer in self.optimizers:
+            assert len(optimizer.param_groups) == 1
         # return [param_group['lr'] for param_group in self.optimizers[0].param_groups]
         return [optimizer.param_groups[0]['lr'] for optimizer in self.optimizers]  # assume we have multiple optimizers, each with only one param_group
 
