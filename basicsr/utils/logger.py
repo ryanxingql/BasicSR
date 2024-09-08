@@ -86,6 +86,11 @@ class MessageLogger():
         current_iter = log_vars.pop('iter')
         lrs = log_vars.pop('lrs')
 
+        # tensorboard logger
+        if self.use_tb_logger and 'debug' not in self.exp_name:
+            for i_v, v in enumerate(lrs):
+                self.tb_logger.add_scalar(f'lr_{i_v + 1}', v, current_iter)
+
         message = (f'[{self.exp_name[:5]}..][epoch:{epoch:3d}, iter:{current_iter:8,d}, lr:(')
         for v in lrs:
             message += f'{v:.3e},'
