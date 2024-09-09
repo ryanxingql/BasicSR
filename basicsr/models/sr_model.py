@@ -213,7 +213,6 @@ class SRModel(BaseModel):
             cal_fid = False
             if 'fid' in self.opt['val']['metrics']:
                 cal_fid = True
-                opt_fid = self.opt['val']['metrics'].pop('fid')  # avoid per-sample evaluation
                 if self.opt['is_train']:
                     fid_sr_folder = osp.join(self.opt['path']['visualization'], 'fid', 'sr')
                     fid_gt_folder = osp.join(self.opt['path']['visualization'], 'fid', 'gt')
@@ -272,6 +271,8 @@ class SRModel(BaseModel):
 
                 # calculate metrics
                 for name, opt_ in self.opt['val']['metrics'].items():
+                    if name == 'fid':  # avoid per-sample evaluation
+                        continue
                     if name in pyiqa_metrics:
                         self.metric_results[name] += pyiqa_metrics[name](**metric_data_tensor).cpu().item()  # input: img paths or RGB [0,1] tensors; target vs. ref
                     else:
