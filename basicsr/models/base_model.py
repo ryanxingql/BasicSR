@@ -327,7 +327,10 @@ class BaseModel():
             current_iter (int): Current iteration.
         """
         if current_iter != -1:
-            state = {'epoch': epoch, 'iter': current_iter, 'optimizers': [], 'schedulers': [], 'best_metric_results': self.best_metric_results}
+            if hasattr(self, 'best_metric_results'):
+                state = {'epoch': epoch, 'iter': current_iter, 'optimizers': [], 'schedulers': [], 'best_metric_results': self.best_metric_results}
+            else:
+                state = {'epoch': epoch, 'iter': current_iter, 'optimizers': [], 'schedulers': []}
             for o in self.optimizers:
                 state['optimizers'].append(o.state_dict())
             for s in self.schedulers:
@@ -367,7 +370,8 @@ class BaseModel():
         for i, s in enumerate(resume_schedulers):
             self.schedulers[i].load_state_dict(s)
 
-        self.best_metric_results = resume_state['best_metric_results']
+        if hasattr(self, 'best_metric_results'):
+            self.best_metric_results = resume_state['best_metric_results']
 
     def reduce_loss_dict(self, loss_dict):
         """reduce loss dict.
