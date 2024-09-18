@@ -188,14 +188,6 @@ class SRModel(BaseModel):
         with_metrics = self.opt['val'].get('metrics') is not None
         use_pbar = self.opt['val'].get('pbar', False)
 
-        if with_metrics:
-            if not hasattr(self, 'metric_results'):  # only execute in the first run
-                self.metric_results = {metric: 0 for metric in self.opt['val']['metrics'].keys()}
-            # initialize the best metric results for each dataset_name (supporting multiple validation datasets)
-            self._initialize_best_metric_results(dataset_name)
-            # zero self.metric_results
-            self.metric_results = {metric: 0 for metric in self.metric_results}
-
         metric_data = dict()
         metric_data_tensor = dict()
         if use_pbar:
@@ -205,9 +197,11 @@ class SRModel(BaseModel):
             # PyIQA metrics settings
             device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
             pyiqa_metrics = dict()
-            for metric_name in self.opt['val']['metrics']:
+            for metric_name in list(self.opt['val']['metrics'].keys()):
                 if self.opt['val']['metrics'][metric_name]['type'] == 'pyiqa':
-                    pyiqa_metrics[metric_name] = pyiqa.create_metric(metric_name, device=device)
+                    pyiqa_metric = pyiqa.create_metric(metric_name, device=device)
+                    self.opt['val']['metrics'][metric_name]['better'] = 'lower' if pyiqa_metric.lower_better else 'higher'
+                    pyiqa_metrics[metric_name] = pyiqa_metric
 
             # FID settings
             cal_fid = False
@@ -219,6 +213,14 @@ class SRModel(BaseModel):
                 else:
                     fid_sr_folder = osp.join(self.opt['path']['visualization'], 'fid', dataset_name, 'sr')
                     fid_gt_folder = osp.join(self.opt['path']['visualization'], 'fid', dataset_name, 'gt')
+
+            # initialize metric_results and best_metric_results
+            if not hasattr(self, 'metric_results'):  # only execute in the first run
+                self.metric_results = {metric: 0 for metric in self.opt['val']['metrics'].keys()}
+            # initialize the best metric results for each dataset_name (supporting multiple validation datasets)
+            self._initialize_best_metric_results(dataset_name)
+            # zero self.metric_results
+            self.metric_results = {metric: 0 for metric in self.metric_results}
 
         for idx, val_data in enumerate(dataloader):
             img_name = osp.splitext(osp.basename(val_data['lq_path'][0]))[0]
