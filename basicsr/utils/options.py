@@ -122,6 +122,10 @@ def parse_options(root_path, is_train=True):
             init_dist(args.launcher)
     opt['rank'], opt['world_size'] = get_dist_info()
 
+    # reproducibility
+    if 'reproduce' not in opt:
+        opt['reproduce'] = False
+
     # random seed
     seed = opt.get('manual_seed')
     if seed is None:
