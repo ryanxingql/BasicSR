@@ -4,6 +4,8 @@ lmdb
 numpy>=1.17
 opencv-python
 Pillow
+
+pyiqa
 pyyaml
 requests
 scikit-image
@@ -13,5 +15,3 @@ torch>=1.7
 torchvision
 tqdm
 yapf
-
-pyiqa

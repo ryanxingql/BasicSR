@@ -1,9 +1,9 @@
+import csv
+import pyiqa
 import torch
 from collections import OrderedDict
 from os import path as osp
 from tqdm import tqdm
-
-import pyiqa
 
 from basicsr.archs import build_network
 from basicsr.losses import build_loss
@@ -195,12 +195,13 @@ class SRModel(BaseModel):
 
         if with_metrics:
             # PyIQA metrics settings
-            device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+            device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
             pyiqa_metrics = dict()
             for metric_name in list(self.opt['val']['metrics'].keys()):
                 if self.opt['val']['metrics'][metric_name]['type'] == 'pyiqa':
                     pyiqa_metric = pyiqa.create_metric(metric_name, device=device)
-                    self.opt['val']['metrics'][metric_name]['better'] = 'lower' if pyiqa_metric.lower_better else 'higher'
+                    self.opt['val']['metrics'][metric_name][
+                        'better'] = 'lower' if pyiqa_metric.lower_better else 'higher'
                     pyiqa_metrics[metric_name] = pyiqa_metric
 
             # FID settings
@@ -276,7 +277,8 @@ class SRModel(BaseModel):
                     if name == 'fid':  # avoid per-sample evaluation
                         continue
                     if name in pyiqa_metrics:
-                        self.metric_results[name] += pyiqa_metrics[name](**metric_data_tensor).cpu().item()  # input: img paths or RGB [0,1] tensors; target vs. ref
+                        self.metric_results[name] += pyiqa_metrics[name](
+                            **metric_data_tensor).cpu().item()  # input: img paths or RGB [0,1] tensors; target vs. ref
                     else:
                         self.metric_results[name] += calculate_metric(metric_data, opt_)
 
@@ -287,10 +289,11 @@ class SRModel(BaseModel):
             pbar.close()
 
         if with_metrics:
+            # calculate FID score
             if cal_fid:
                 self.metric_results['fid'] = pyiqa_metrics['fid'](target=fid_sr_folder, ref=fid_gt_folder)
 
-            # log metric results
+            # average and log metric results
             for metric in self.metric_results.keys():
                 if metric != 'fid':
                     self.metric_results[metric] /= (idx + 1)
@@ -313,6 +316,35 @@ class SRModel(BaseModel):
         if tb_logger:
             for metric, value in self.metric_results.items():
                 tb_logger.add_scalar(f'metrics/{dataset_name}/{metric}', value, current_iter)
+
+        # save csv
+        metrics = []
+        values = []
+        best_values = []
+        for metric, value in self.metric_results.items():
+            metrics.append(metric)
+            values.append(f'{value:.4f}')
+            best_values.append(f'{self.best_metric_results[dataset_name][metric]["val"]:.4f}')
+
+        csv_path = osp.join(self.opt['path']['results_root'], 'metrics.csv')
+        if not osp.exists(csv_path):
+            with open(csv_path, mode='w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['iter'] + metrics)
+        with open(csv_path, mode='a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([f'{current_iter}'] + values)
+            writer.writerow([f'best @ {current_iter}'] + best_values)
+
+        # save Markdown table
+        md_path = osp.join(self.opt['path']['results_root'], 'metrics.md')
+        if not osp.exists(md_path):
+            with open(md_path, mode='w') as f:
+                f.write('| iter | ' + ' | '.join(metrics) + ' |\n')
+                f.write('| --- | ' + ' | '.join(['---' for _ in metrics]) + ' |\n')
+        with open(md_path, mode='a') as f:
+            f.write(f'| {current_iter} | ' + ' | '.join(values) + ' |\n')
+            f.write(f'| best @ {current_iter} | ' + ' | '.join(best_values) + ' |\n')
 
     def get_current_visuals(self):
         out_dict = OrderedDict()

@@ -205,7 +205,8 @@ class BaseModel():
         for optimizer in self.optimizers:
             assert len(optimizer.param_groups) == 1
         # return [param_group['lr'] for param_group in self.optimizers[0].param_groups]
-        return [optimizer.param_groups[0]['lr'] for optimizer in self.optimizers]  # assume we have multiple optimizers, each with only one param_group
+        return [optimizer.param_groups[0]['lr']
+                for optimizer in self.optimizers]  # assume we have multiple optimizers, each with only one param_group
 
     @master_only
     def save_network(self, net, net_label, current_iter, param_key='params'):
@@ -328,7 +329,13 @@ class BaseModel():
         """
         if current_iter != -1:
             if hasattr(self, 'best_metric_results'):
-                state = {'epoch': epoch, 'iter': current_iter, 'optimizers': [], 'schedulers': [], 'best_metric_results': self.best_metric_results}
+                state = {
+                    'epoch': epoch,
+                    'iter': current_iter,
+                    'optimizers': [],
+                    'schedulers': [],
+                    'best_metric_results': self.best_metric_results
+                }
             else:
                 state = {'epoch': epoch, 'iter': current_iter, 'optimizers': [], 'schedulers': []}
             for o in self.optimizers:

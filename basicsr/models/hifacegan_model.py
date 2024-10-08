@@ -101,7 +101,7 @@ class HiFaceGANModel(SRModel):
         The prediction contains the intermediate outputs of multiscale GAN,
         so it's usually a list
         """
-        if type(pred) == list:
+        if isinstance(pred, list):
             fake = []
             real = []
             for p in pred:
