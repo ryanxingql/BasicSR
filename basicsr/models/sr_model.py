@@ -188,11 +188,6 @@ class SRModel(BaseModel):
         with_metrics = self.opt['val'].get('metrics') is not None
         use_pbar = self.opt['val'].get('pbar', False)
 
-        metric_data = dict()
-        metric_data_tensor = dict()
-        if use_pbar:
-            pbar = tqdm(total=len(dataloader), unit='image')
-
         if with_metrics:
             # PyIQA metrics settings
             device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -223,6 +218,10 @@ class SRModel(BaseModel):
             # zero self.metric_results
             self.metric_results = {metric: 0 for metric in self.metric_results}
 
+        metric_data = dict()
+        metric_data_tensor = dict()
+        if use_pbar:
+            pbar = tqdm(total=len(dataloader), unit='image')
         for idx, val_data in enumerate(dataloader):
             img_name = osp.splitext(osp.basename(val_data['lq_path'][0]))[0]
             self.feed_data(val_data)
@@ -324,7 +323,8 @@ class SRModel(BaseModel):
         for metric, value in self.metric_results.items():
             metrics.append(metric)
             values.append(f'{value:.4f}')
-            best_values.append(f'{self.best_metric_results[dataset_name][metric]["val"]:.4f}')
+            if hasattr(self, 'best_metric_results'):
+                best_values.append(f'{self.best_metric_results[dataset_name][metric]["val"]:.4f}')
 
         csv_path = osp.join(self.opt['path']['results_root'], 'metrics.csv')
         if not osp.exists(csv_path):
@@ -334,7 +334,8 @@ class SRModel(BaseModel):
         with open(csv_path, mode='a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([f'{current_iter}'] + values)
-            writer.writerow([f'best @ {current_iter}'] + best_values)
+            if hasattr(self, 'best_metric_results'):
+                writer.writerow([f'best @ {current_iter}'] + best_values)
 
         # save Markdown table
         md_path = osp.join(self.opt['path']['results_root'], 'metrics.md')
@@ -344,7 +345,8 @@ class SRModel(BaseModel):
                 f.write('| --- | ' + ' | '.join(['---' for _ in metrics]) + ' |\n')
         with open(md_path, mode='a') as f:
             f.write(f'| {current_iter} | ' + ' | '.join(values) + ' |\n')
-            f.write(f'| best @ {current_iter} | ' + ' | '.join(best_values) + ' |\n')
+            if hasattr(self, 'best_metric_results'):
+                f.write(f'| best @ {current_iter} | ' + ' | '.join(best_values) + ' |\n')
 
     def get_current_visuals(self):
         out_dict = OrderedDict()
