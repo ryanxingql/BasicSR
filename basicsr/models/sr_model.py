@@ -326,7 +326,7 @@ class SRModel(BaseModel):
             if hasattr(self, 'best_metric_results'):
                 best_values.append(f'{self.best_metric_results[dataset_name][metric]["val"]:.4f}')
 
-        csv_path = osp.join(self.opt['path']['results_root'], 'metrics.csv')
+        csv_path = osp.join(self.opt['path']['log'], 'metrics.csv')
         if not osp.exists(csv_path):
             with open(csv_path, mode='w', newline='') as f:
                 writer = csv.writer(f)
@@ -338,7 +338,7 @@ class SRModel(BaseModel):
                 writer.writerow([f'best @ {current_iter}'] + best_values)
 
         # save Markdown table
-        md_path = osp.join(self.opt['path']['results_root'], 'metrics.md')
+        md_path = osp.join(self.opt['path']['log'], 'metrics.md')
         if not osp.exists(md_path):
             with open(md_path, mode='w') as f:
                 f.write('| iter | ' + ' | '.join(metrics) + ' |\n')
